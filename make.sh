@@ -1,8 +1,9 @@
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
-FILES=(dxxxx-allocate_unique)
+FILES=(dxxxx-allocate_unique dxxxx-deduction-guides)
 
-for file in ${FILES}; do
-	rst2html.py $file.rst $file.html
+mkdir -p docs
+for file in dxxxx-allocate_unique dxxxx-deduction-guides; do
+	./rst2html.py $file.rst docs/$file.html
 done
