@@ -2,17 +2,19 @@
  allocate_unique and related utilities
 =======================================
 
-:Document:	Dxxxx
-:Date:		2016-04-04
+:Document:	D0316R0
+:Date:		2017-0117
 :Project:	Programming Language C++
 :Audience:	Library Evolution Working Group
 :Author:	Miro Knejp <miro.knejp@gmail.com>
-:URL:		https://github.com/mknejp/isocpp-papers/blob/master/dxxxx-allocate_unique.rst
 
+.. role:: cpp(code)
+	:language: c++
+   
 Abstract
 ========
 
-This paper proposes the addition of the function ``allocate_unique()`` to complement the functionality of ``allocate_shared()`` for ``unique_ptr``, as well as the addition of the utilities ``allocator_delete`` and ``make_allocator_delete()`` to hide frequently needed boilerplate when implementing allocator-aware data structures.
+This paper proposes the addition of the function ``allocate_unique()`` to complement the functionality of ``allocate_shared()`` for ``unique_ptr``, as well as the addition of the utility ``allocator_delete`` to hide frequently needed boilerplate when implementing allocator-aware data structures.
 
 .. contents::
 
@@ -23,7 +25,7 @@ There is currently an asymmetry in functionality regarding the creation of ``sha
 
 The additions proposed in this paper can be found re-intenved in virtually every library that offers custom allocator support and are already present in standard library implementations for internal use making it obvious this is a frequently sought after functionality that should be readily available in the standard (and *de-facto* already is, albeit not under a well-known name).
 
-The inclusion of ``allocator_delete`` and ``make_allocator_delete()`` removes an additional burden for implementing allocator-aware data structures outside the scope of ``unique_ptr``. Together with ``allocate_unique`` they provide the means to conveniently create and destroy objects with custom allocators which are not directly tied to ``unique_ptr`` lifetimes (such as node-based or type-erasing containers, to name a few).
+The inclusion of ``allocator_delete`` removes an additional burden for implementing allocator-aware data structures outside the scope of ``unique_ptr``. Together with ``allocate_unique`` it provides the means to conveniently create and destroy objects with custom allocators which are not directly tied to ``unique_ptr`` lifetimes (such as node-based or type-erasing containers, to name a few).
 
 Proposal
 ========
@@ -32,15 +34,16 @@ Synopsis
 --------
 
 .. code:: c++
-
+	:number-lines:
+	
 	template<class T, class Alloc>
 	class allocator_delete {
 	public:
 	  using allocator_type = remove_cv_t<Alloc>;
 	  using pointer = typename allocator_traits<allocator_type>::pointer;
 
-	  template<class... Args>
-	  allocator_delete(Args&&... args);
+	  template<class OtherAlloc>
+	  allocator_delete(OtherAlloc&& other);
 
 	  void operator()(pointer p);
 
@@ -50,6 +53,10 @@ Synopsis
 	private:
 	  allocator_type alloc; // for exposition only
 	};
+	
+	template<class T, class OtherAlloc>
+	allocator_delete(OtherAlloc&& alloc)
+	  -> allocator_delete<T, typename allocator_traits<decay_t<OtherAlloc>>::template rebind_alloc<T>>
 
 	template<class T, class Alloc>
 	class allocator_delete<T, Alloc&> {
@@ -57,7 +64,6 @@ Synopsis
 	  using allocator_type = remove_cv_t<Alloc>;
 	  using pointer = typename allocator_traits<allocator_type>::pointer;
 
-	  allocator_delete(Alloc& alloc);
 	  allocator_delete(reference_wrapper<Alloc> alloc);
 
 	  void operator()(pointer p);
@@ -69,16 +75,12 @@ Synopsis
 	};
 
 	template<class T, class Alloc>
-	  allocator_delete<T, typename allocator_traits<decay_t<Alloc>>::template rebind_alloc<T>>
-	    make_allocator_delete(Alloc&& alloc);
-
-	template<class T, class Alloc>
-	  allocator_delete<T, Alloc&>
-	    make_allocator_delete(reference_wrapper<Alloc> alloc);
+	allocator_delete(reference_wrapper<Alloc> alloc)
+	  -> allocator_delete<T, Alloc&>
 
 	template<class T, class Alloc, class... Args>
 	  unique_ptr<T, allocator_delete<T, typename allocator_traits<remove_cv_t<Alloc>>::template rebind_alloc<T>>>
-	    allocate_unique(const Alloc& alloc, Args&&... args);
+	    allocate_unique(Alloc&& alloc, Args&&... args);
 
 	template<class T, class Alloc, class... Args>
 	  unique_ptr<T, allocator_delete<T, Alloc&>>
@@ -91,40 +93,41 @@ The standard library already provides one type intended to be used as the ``Dele
 
 ``allocator_delete`` does not perform rebinding in its call operator. It is an error to instantiate ``allocator_delete`` with a type ``Alloc`` not capable of deallocating objects of type ``T``. This decision was deliberately made to avoid unnecessary rebinding and copy-constructing of potentially stateful allocators for every single deletion in the call operator.
 
-make_allocator_delete
----------------------
+Because ``allocator_delete`` must be instantiated only with an allocator type capable of deallocating the intended target type it cannot be naively created from an existing allocator without doing additional work. Class template deduction guides help picking the correct template argument for ``Alloc`` and hide the required allocator rebinding.
 
-Because ``allocator_delete`` must be instantiated only with an allocator type capable of deallocating the intended target type it cannot be naively created from an existing allocator without doing additional work. ``make_allocator_delete()`` is the utility that hides this rebinding business from users and always returns an ``allocator_delete`` type with an allocator capable of deallocating objects of type ``T``.
+Constructing it with a ``reference_wrapper<Alloc>`` argument deduces the second template argument to a reference type resulting in ``allocator_delete`` storing only a reference to an allocator instead of a copy. In this case no rebinding takes place as that would necessitate copying and the user *deliberately* requested reference semantics.
 
-The overload taking a ``reference_wrapper<Alloc>`` results in an ``allocator_delete`` storing only a reference to an allocator instead of a copy. Because the type of the existing allocator cannot be changed and because it would be surprising to create a copy of the allocator when the user *deliberately* specified a ``reference_wrapper``, the referenced allocator must have the same type as the rebound allocator for type ``T``, meaning the condition ``is_same<remove_cv<Alloc>, allocator_traits<remove_cv<Alloc>>::rebind_alloc<T>>::value`` must be ``true``.
 
 allocate_unique
 ---------------
 
-This is the main motivation of this proposal. The above are required to implement ``allocate_unique()`` but are useful enough on their own outside the scope of ``allocate_unique()`` and are therefore proposed as well.
+This is the main motivation of this proposal. The above is required to implement ``allocate_unique()`` but is useful enough on its own outside the scope of ``allocate_unique()`` and is therefore proposed as well.
 
 The ``allocate_unique()`` function is not overly big but tricky enough to implement that a naive approach might be incorrect. Below is an implementation that, to the author's knowledge, is correct and exception safe. Achieving exception safety with the two-phase creation required with the allocator interface is a common oversight.
 
 .. code:: c++
+	:number-lines:
 
 	template<class T, class Alloc, class... Args>
 	auto allocate_unique(const Alloc& alloc, Args&&... args) {
 	  using traits = typename allocator_traits<Alloc>::template rebind_traits<T>;
-	  auto hold_deleter = [&alloc] (auto p) {
-	    traits::deallocate(alloc, p, 1);
+	  auto my_alloc = typename traits::allocator_type(alloc);
+	  auto hold_deleter = [&my_alloc] (auto p) {
+	    traits::deallocate(my_alloc, p, 1);
 	  };
-	  auto deleter = make_allocator_delete<T>(alloc);
-	  unique_ptr<T, decltype(hold_deleter)> hold(traits::allocate(alloc, 1), hold_deleter);
-	  traits::construct(alloc, hold.get(), forward<Args>(args)...);
+	  using hold_t = unique_ptr<T, decltype(hold_deleter)>;
+	  auto hold = hold_t(traits::allocate(my_alloc, 1), hold_deleter);
+	  traits::construct(my_alloc, hold.get(), forward<Args>(args)...);
+	  auto deleter = allocator_delete<T>(my_alloc);
 	  return unique_ptr<T, decltype(deleter)>{hold.release(), move(deleter)};
 	}
 
 Implementations very similar to the above can be found in numerous libraries and standard implementations. It is a pattern of boilerplate that is repeated frequently enough that it should be included in the standard. Often the intermediary use of a RAII wrapper around the ``allocate``-``deallocate`` pair is forgotten thus resulting in memory leaks if the constructor of ``T`` throws. This is a trap people should not have to worry about in the first place.
 
-Applications Outside of allocate_shared
+Applications Outside of allocate_unique
 =======================================
 
-``allocator_delete`` and ``make_allocator_delete()`` are technically not required to be made available in the standard library's public interface as they can be easily marked as *implementation-defined* in the return type of ``allocate_shared()`` as is currently done for the return type of ``bind()``. However their utility shows itself even in other applications for which some examples are given here to convince the reader of their usefulness.
+``allocator_delete`` is technically not required to be made available in the standard library's public interface as it can be easily marked as *implementation-defined* in the return type of ``allocate_unique()`` as is currently done for the return type of ``bind()``. However its utility shows itself even in other applications for which some examples are given here to convince the reader of their usefulness.
 
 Node-Based Containers
 ---------------------
@@ -134,7 +137,8 @@ Node-based containers like ``map`` or ``list`` do typically not store a ``unique
 This means in practice something like this:
 
 .. code:: c++
-	
+	:number-lines:
+
 	template<class T, class Alloc>
 	class list {
 	  struct node {
@@ -153,7 +157,8 @@ This means in practice something like this:
 	    auto hold_deleter = [&alloc] (auto p) {
 	      traits::deallocate(alloc, p, 1);
 	    };
-	    unique_ptr<node, decltype(hold_deleter)> hold(traits::allocate(alloc, 1), hold_deleter);
+		using hold_t = unique_ptr<node, decltype(hold_deleter)>;
+	    auto hold = hold_t(traits::allocate(alloc, 1), hold_deleter);
 	    traits::construct(alloc, hold.get(), ...);
 	    append_node_to_list(hold.release()); // noexcept
 	  }
@@ -169,6 +174,7 @@ This means in practice something like this:
 Compare this to using the utilities proposed in this paper:
 
 .. code:: c++
+	:number-lines:
 
 	template<class T, class Alloc>
 	class list {
@@ -189,7 +195,7 @@ Compare this to using the utilities proposed in this paper:
 	  }
 
 	  ~list() {
-	    auto del = make_allocator_deleter<node>(ref(alloc));
+	    auto del = allocator_deleter<node>(ref(alloc));
 	    for(auto* node : nodes()) {
 	      del(node);
 	    }
@@ -206,6 +212,7 @@ Containers like ``function`` or ``shared_ptr`` employ a technique called *type e
 Below is an excerpt showing how such type erasure is frequently implemented:
 
 .. code:: c++
+	:number-lines:
 
 	class any {
 	  struct base {
@@ -220,8 +227,8 @@ Below is an excerpt showing how such type erasure is frequently implemented:
 	    derived(const Alloc& alloc, T x);
 	    void destroy() noexcept override {
 	      using rebind = typename allocator_traits<Alloc>::template rebind_alloc<derived>; // X
-	      rebind alloc{move(get<0>(data))};                                                // X
-	      auto* p = this;                                                                  // X <- danger
+	      auto alloc = rebind{move(get<0>(data))};                                         // X
+	      auto* p = this;                                                                  // X
 	      allocator_traits<rebind>::destroy(alloc, p);                                     // X
 	      allocator_traits<rebind>::deallocate(alloc, p, 1);                               // X
 	    }
@@ -237,14 +244,15 @@ Below is an excerpt showing how such type erasure is frequently implemented:
 	  template<class Alloc, class T>
 	  void assign(const Alloc& alloc, T x) {
 	    using node = derived<Alloc, T>;
-	    using rebind = typename allocator_traits<Alloc>::template rebind_alloc<node>;                 // X
-	    using traits = allocator_traits<rebind>;                                                      // X
-	    auto node_alloc = rebind{alloc};                                                              // X
-	    auto hold_deleter = [&node_alloc] (auto p) {                                                  // X
-	      traits::deallocate(node_alloc, p, 1);                                                       // X
-	    };                                                                                            // X
-	    unique_ptr<node, decltype(hold_deleter)> hold(traits::allocate(node_alloc, 1), hold_deleter); // X
-	    traits::construct(node_alloc, hold.get(), alloc, move(x));                                    // X
+	    using rebind = typename allocator_traits<Alloc>::template rebind_alloc<node>; // X
+	    using traits = allocator_traits<rebind>;                                      // X
+	    auto node_alloc = rebind{alloc};                                              // X
+	    auto hold_deleter = [&node_alloc] (auto p) {                                  // X
+	      traits::deallocate(node_alloc, p, 1);                                       // X
+	    };                                                                            // X
+	    using hold_t = unique_ptr<node, decltype(hold_deleter)>;                      // X
+	    auto hold = hold_t(traits::allocate(node_alloc, 1), hold_deleter);            // X
+	    traits::construct(node_alloc, hold.get(), alloc, move(x));                    // X
 	    if(value) {
 	      value->destroy();
 	    }
@@ -257,9 +265,10 @@ Below is an excerpt showing how such type erasure is frequently implemented:
 	  }
 	};
 
-About half the functional code in this example (marked with ``X``) deals with nothing else but rebinding allocators and doing the allocator dance. It also contains subtle traps. Note the line marked with **danger**. Were one to not make a copy of ``this`` but pass it as argument to ``destroy()`` and ``deallocate()`` then accessing ``this`` after the call to ``destroy()`` (which calls the destructor) is undefined. The above can be significantly simplified with the proper tools:
+About half the functional code in this example (marked with ``X``) does the allocator dance. The above can be significantly simplified with the proper tools:
 
 .. code:: c++
+	:number-lines:
 
 	class any {
 	  struct base {
@@ -273,8 +282,8 @@ About half the functional code in this example (marked with ``X``) deals with no
 	  struct derived : base {
 	    derived(const Alloc& alloc, T x);
 	    void destroy() noexcept override {
-	      auto deleter = make_allocator_delete<derived>(move(get<0>(data))); // X
-	      deleter(this);                                                     // X
+	      auto deleter = allocator_delete<derived>(move(get<0>(data))); // X
+	      deleter(this);                                                // X
 	    }
 	    void do_something() override { ... }
 	    tuple<Alloc, T> data;
@@ -309,16 +318,16 @@ Open Issues
 allocate_unique<T[]>
 --------------------
 
-The current design of ``unique_ptr`` and the associated deleter means we cannot make ``allocator_delete`` compatible with the array-based ``unique_ptr<T[]>`` specialization because there is no way to tell the deleter how many objects to delete. ``default_delete`` circumvents this problem because the ``delete[]`` operator knows how many elements were allocated with ``new T[]`` and it combines both destruction and deallocation in one operation. In contrast the allocator interface imposes a two-phase cleanup process. Making ``allocator_delete`` universally compatible with array-based ``unique_ptr<T[]>`` requires the addition of a second overload to the deleter's call operator with the signature ``void(pointer p, size_t n)`` which ``unique_ptr<T[]>`` would prefer if present. This overload loops over all elements calling ``destroy()`` for each and finally calls ``deallocate()`` with the provided size.
+The current design of ``unique_ptr`` and the associated deleter means we cannot make ``allocator_delete`` compatible with the array-based ``unique_ptr<T[]>`` specialization because there is no way to tell the deleter how many objects to delete. ``default_delete`` circumvents this problem because the ``delete[]`` operator knows how many elements were allocated with ``new T[]`` and it combines both destruction and deallocation in one operation. In contrast the allocator interface imposes a two-phase cleanup process. Making ``allocator_delete`` universally compatible with array-based ``unique_ptr<T[]>`` requires either the addition of a second overload to the deleter's call operator with the signature ``void(pointer p, size_t n)`` which ``unique_ptr<T[]>`` would prefer if present, or make it store the number of allocated elements in advance.
 
-But since that requires modifications to existing library types it is currently not proposed and therefore ``allocate_unique()`` with its first template parameter being of the form ``T[]`` is ill-formed.
+Therefore ``allocate_unique()`` with its first template parameter being of the form ``T[]`` is currently marked as ill-formed until this issue finds a resolution.
 
 Summary
 =======
 
 Experience shows that the mechanism abstracted behind ``allocate_unique()`` is widely re-invented in many projects. Standard library implementations already have it for internal use but people still have to implement their own. As shown in this proposal doing so correctly is tricky and requires more knowledge about the interface of allocators than is usually necessary to actually do the required job. As such the barrier of entry to providing allocator support in a library is often very high as doing it properly involves careful studying of the allocator interface which many consider to be expert-level territory and prefer not to touch with a ten foot pole.
 
-The provided examples show how making some utilities used to implement ``allocate_unique()`` available as part of the public interface can greatly help in adding allocator support to other data structures by significantly cutting down on the required boilerplate.
+The provided examples show how making internal utilities used to implement ``allocate_unique()`` available as part of the public interface can greatly help in adding allocator support to other data structures by significantly cutting down on the required boilerplate.
 
 Technical Specification
 =======================
