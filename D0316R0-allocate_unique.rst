@@ -1,5 +1,5 @@
 ===============================================================================
- allocate_unique and related utilities
+ ``allocate_unique`` and ``allocator_delete``
 ===============================================================================
 
 :Document:	D0316R0
@@ -32,7 +32,7 @@ The inclusion of ``allocator_delete`` removes an additional burden for implement
 Proposal
 ===============================================================================
 
-Synopsis
+Overview
 -------------------------------------------------------------------------------
 
 .. code:: c++
@@ -56,10 +56,6 @@ Synopsis
 	  allocator_type alloc; // for exposition only
 	};
 	
-	template<class T, class OtherAlloc>
-	allocator_delete(OtherAlloc&& alloc)
-	  -> allocator_delete<T, typename allocator_traits<decay_t<OtherAlloc>>::template rebind_alloc<T>>
-
 	template<class T, class Alloc>
 	class allocator_delete<T, Alloc&> {
 	public:
@@ -76,12 +72,16 @@ Synopsis
 	  reference_wrapper<Alloc> alloc; // for exposition only
 	};
 
+	template<class T, class OtherAlloc>
+	allocator_delete(OtherAlloc&& alloc)
+	  -> allocator_delete<T, typename allocator_traits<OtherAlloc>::template rebind_alloc<T>>;
+
 	template<class T, class Alloc>
 	allocator_delete(reference_wrapper<Alloc> alloc)
-	  -> allocator_delete<T, Alloc&>
+	  -> allocator_delete<T, Alloc&>;
 
 	template<class T, class Alloc, class... Args>
-	  unique_ptr<T, allocator_delete<T, typename allocator_traits<remove_cv_t<Alloc>>::template rebind_alloc<T>>>
+	  unique_ptr<T, allocator_delete<T, typename allocator_traits<Alloc>::template rebind_alloc<T>>>
 	    allocate_unique(Alloc&& alloc, Args&&... args);
 
 	template<class T, class Alloc, class... Args>
@@ -322,7 +322,7 @@ allocate_unique<T[]>
 
 The current design of ``unique_ptr`` and the associated deleter means we cannot make ``allocator_delete`` compatible with the array-based ``unique_ptr<T[]>`` specialization because there is no way to tell the deleter how many objects to delete. ``default_delete`` circumvents this problem because the ``delete[]`` operator knows how many elements were allocated with ``new T[]`` and it combines both destruction and deallocation in one operation. In contrast the allocator interface imposes a two-phase cleanup process. Making ``allocator_delete`` universally compatible with array-based ``unique_ptr<T[]>`` requires either the addition of a second overload to the deleter's call operator with the signature ``void(pointer p, size_t n)`` which ``unique_ptr<T[]>`` would prefer if present, or make it store the number of allocated elements in advance.
 
-Therefore ``allocate_unique()`` with its first template parameter being of the form ``T[]`` is currently marked as ill-formed until this issue finds a resolution.
+Therefore ``allocate_unique()`` with its first template parameter being of the form ``T[]`` is currently considered ill-formed until this issue finds a resolution.
 
 Summary
 ===============================================================================
@@ -331,12 +331,320 @@ Experience shows that the mechanism abstracted behind ``allocate_unique()`` is w
 
 The provided examples show how making internal utilities used to implement ``allocate_unique()`` available as part of the public interface can greatly help in adding allocator support to other data structures by significantly cutting down on the required boilerplate.
 
-Technical Specification
+Proposed Wording
 ===============================================================================
 
-TBA
+These changes are based on [N4618]_.
 
+#. Change 20.11.1 [unique.ptr] paragraph 6 as follows:
+
+	::
+
+		template<class T> struct default_delete;
+		template<class T> struct default_delete<T[]>;
+
+	.. class:: insert
+
+	::
+
+		template<class T, class Alloc> class allocator_delete;
+		template<class T, class Alloc> class allocator_delete<T, Alloc&>;
+
+		template<class T, class Alloc>
+		allocator_delete(Alloc&& alloc)
+		  -> allocator_delete<T, typename allocator_traits<Alloc>::template rebind_alloc<T>>;
+
+		template<class T, class Alloc>
+		allocator_delete(reference_wrapper<Alloc> alloc)
+		  -> allocator_delete<T, Alloc&>;
+		
+	::
+
+		template<class T, class D = default_delete<T>> class unique_ptr;
+		template<class T, class D> class unique_ptr<T[], D>;
+		
+		template<class T, class... Args> unique_ptr<T> make_unique(Args&&... args);
+		template<class T> unique_ptr<T> make_unique(size_t n);
+		template<class T, class... Args> unspecified make_unique(Args&&...) = delete;
+
+	.. class:: insert
+
+	::
+
+		template<class T, class Alloc, class... Args>
+		  unique_ptr<T, see below> allocate_unique(Alloc&& alloc, Args&&... args);
+		template<class T, class Alloc, class... Args>
+		  unique_ptr<T, see below> allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args);
+		template<class T, class Alloc, class... Args>
+		  unspecified allocate_unique(Alloc&& alloc, Args&&... args) = delete;
+		template<class T, class Alloc, class... Args>
+		  unspecified allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args) = delete;
+
+	::
+		
+		template<class T, class D> void swap(unique_ptr<T, D>& x, unique_ptr<T, D>& y) noexcept;
+		
+#. Add a new section to 20.11.1 [unique.ptr] as follows:
+
+	.. class:: std-section
+	
+	20.11.1.x Allocator deleter [unique.ptr.allocdltr]
+	
+	.. class:: std-section
+	
+	20.11.1.x.1 In general [unique.ptr.allocdltr.general]
+	
+	The class template ``allocator_delete`` delegates deletion to client-supplied allocators when used as deleter (destruction policy) for the class template ``unique_ptr``.
+	
+	The template parameter ``Alloc`` of ``allocator_delete`` shall satisfy the requirements of ``Allocator`` (Table 31) unless it is a reference type in which case the requirement applies to the referred-to type.
+
+	The template parameter ``Alloc`` of ``allocator_delete`` shall not be a rvalue reference type.
+		
+	The template parameter ``T`` of ``allocator_delete`` may be an incomplete type if the used allocator satisfies the allocator completeness requirements 17.5.3.5.1.
+	
+	.. class:: std-note
+	
+	[Note: The intended way of creating ``allocator_delete`` objects is utilizing the class template deduction guides via ``allocator_delete<T>(alloc)`` and ``allocator_delete<T>(ref(alloc))`` which take care of allocator rebinding. -end note]
+	
+	.. class:: std-section
+		
+	20.11.1.x.2 ``allocator_delete`` [unique.ptr.allocdltr.copy]
+
+	::
+	
+		namespace std {
+		  template<class T, class Alloc>
+		  class allocator_delete {
+		  public:
+		    using allocator_type = remove_cv_t<Alloc>;
+		    using pointer = typename allocator_traits<allocator_type>::pointer;
+
+		    template<class OtherAlloc>
+		      allocator_delete(OtherAlloc&& other) noexcept;
+		    template<class U, class OtherAlloc>
+		      allocator_delete(const allocator_delete<U, OtherAlloc>& other) noexcept;
+		    template<class U, class OtherAlloc>
+		      allocator_delete(allocator_delete<U, OtherAlloc>&& other) noexcept;
+			
+		    template<class U, class OtherAlloc>
+		      allocator_delete& operator=(const allocator_delete<U, OtherAlloc>& other) noexcept;
+		    template<class U, class OtherAlloc>
+		      allocator_delete& operator=(allocator_delete<U, OtherAlloc>&& other) noexcept;
+
+		    void operator()(pointer p);
+
+		    Alloc& get_allocator() noexcept;
+		    const Alloc& get_allocator() const noexcept;
+		  
+		    void swap(allocator_delete& other) noexcept;
+
+		  private:
+		    Alloc alloc; // for exposition only
+		  };
+		}
+		
+	The primary class template ``allocator_delete`` delegates the deletion operation to an instance of ``Alloc`` stored as part of the deleter.
+	
+	.. class:: std-section
+	
+	``template<class OtherAlloc> allocator_delete(OtherAlloc&& other) noexcept;``
+	
+		*Requires:* ``OtherAlloc`` shall satisfy the requirements of ``Allocator`` (Table 31).
+	
+		*Effects:* Constructs an ``allocator_delete`` object initializing the stored allocator with ``forward<OtherAlloc>(other)``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless ``is_constructible_v<Alloc, OtherAlloc&&>`` is ``true``.
+		
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete(const allocator_delete<U, OtherAlloc>& other) noexcept;``
+	
+		*Effects:* Constructs an ``allocator_delete`` object initializing the stored allocator with ``other.get_allocator()``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``is_constructible_v<Alloc, const remove_reference_t<OtherAlloc>&>`` is ``true``.
+		
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete(allocator_delete<U, OtherAlloc>&& other) noexcept;``
+	
+		*Effects:* Constructs an ``allocator_delete`` object initializing the stored allocator with ``move(other.get_allocator())``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``is_constructible_v<Alloc, remove_reference_t<OtherAlloc>&&)`` is ``true``.
+		
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete& operator=(const allocator_delete<U, OtherAlloc>& other) noexcept;``
+	
+		*Effects:* ``get_allocator() = other.get_allocator()``.
+		
+		*Remarks:* This operator shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``is_assignable_v<Alloc, const remove_reference_t<OtherAlloc>&>`` is ``true``.
+			
+		*Returns:* ``*this``.
+		
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete& operator=(allocator_delete<U, OtherAlloc>&& other) noexcept;``
+	
+		*Effects:* ``get_allocator() = move(other.get_allocator())``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``is_assignable_v<Alloc, remove_reference_t<OtherAlloc>&&)`` is ``true``.
+		
+		*Returns:* ``*this``.
+		
+	.. class:: std-section
+	
+	``void operator()(pointer p);``
+	
+		*Effects:* Calls ``p->~T()`` followed by ``allocator_traits<Alloc>::deallocate(get_allocator(), p, 1)``.
+	
+	.. class:: std-section
+	
+	| ``Alloc& get_allocator() noexcept;``
+	| ``const Alloc& get_allocator() const noexcept;``
+		
+		*Returns:* A reference to the stored allocator.
+
+	.. class:: std-section
+	
+	``void swap(allocator_delete& other) noexcept;``
+	
+		*Requires:* ``get_allocator()`` shall be swappable (17.5.3.2) and shall not throw an exception under ``swap``.
+		
+		*Effects:* Invokes ``swap`` on the stored allocators of ``*this`` and ``other``.
+	
+	.. class:: std-section
+	
+	20.11.1.x.3 ``allocator_delete<T, Alloc&>`` [unique.ptr.allocdltr.ref]
+
+	::
+	
+		namespace std {
+		  template<class T, class Alloc>
+		  class allocator_delete<T, Alloc&> {
+		  public:
+		    using allocator_type = remove_cv_t<Alloc>;
+		    using pointer = typename allocator_traits<allocator_type>::pointer;
+
+		    template<class OtherAlloc>
+		      allocator_delete(reference_wrapper<OtherAlloc> other) noexcept;
+		    template<class U, class OtherAlloc>
+		      allocator_delete(allocator_delete<U, OtherAlloc&> other) noexcept;
+		    template<class U, class OtherAlloc>
+		      allocator_delete& operator=(allocator_delete<U, OtherAlloc&> other) noexcept;
+
+		    void operator()(pointer p);
+
+		    Alloc& get_allocator() const noexcept;
+		  
+		    void swap(allocator_delete& other) noexcept;
+
+		  private:
+		    reference_wrapper<Alloc> alloc; // for exposition only
+		  };
+		}
+		
+	A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored instance.
+	
+	.. class:: std-section
+	
+	``template<class OtherAlloc> allocator_delete(reference_wrapper<OtherAlloc> other) noexcept;``
+	
+		*Requires:* ``OtherAlloc`` shall satisfy the requirements of ``Allocator`` (Table 31).
+	
+		*Effects:* Constructs an ``allocator_delete`` object storing a reference to ``other.get()``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless ``OtherAlloc&`` is implicitly convertible to ``Alloc&``.
+		
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete(allocator_delete<U, OtherAlloc&> other) noexcept;``
+	
+		*Effects:* Constructs an ``allocator_delete`` object storing a reference to ``other.get_allocator()``.
+		
+		*Remarks:* This constructor shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``OtherAlloc&`` is implicitly convertible to ``Alloc&``.
+			
+	.. class:: std-section
+	
+	``template<class U, class OtherAlloc> allocator_delete& operator=(allocator_delete<U, OtherAlloc&> other) noexcept;``
+	
+		*Effects:* Rebinds the stored allocator reference to ``other.get_allocator()``.
+		
+		*Remarks:* This operator shall not participate in overload resolution unless:
+			- ``U*`` is implicitly convertible to ``T*``, and
+			- ``OtherAlloc&`` is implicitly convertible to ``Alloc&``.
+			
+		*Returns:* ``*this``.
+		
+	.. class:: std-section
+	
+	``void operator()(pointer p);``
+	
+		*Effects:* Calls ``p->~T()`` followed by ``allocator_traits<Alloc>::deallocate(get_allocator(), p, 1)``.
+	
+	.. class:: std-section
+	
+	``Alloc& get_allocator() const noexcept;``
+		
+		*Returns:* ``alloc.get()``.
+
+	.. class:: std-section
+	
+	``void swap(allocator_delete& other) noexcept;``
+	
+		*Effects:* Swaps the allocator references of ``*this`` and ``other``.
+	
+#. Append new paragraphs to section 20.11.1.4 [unique.ptr.create] as follows:
+
+	.. class:: std-section
+	
+	``template<class T, class Alloc, class... Args> unique_ptr<T,`` *see below* ``> allocate_unique(Alloc&& alloc, Args&&... args);``
+	
+		*Requires:* The expression ``::new (pv) T(forward<Args>(args)...)`` where ``pv`` has type ``void*`` and points to storage suitable for holding an object of type ``T``, shall be well formed. ``Alloc`` shall satisfy the requirements of ``Allocator`` (17.5.3.5).
+	
+		*Effects:* Allocates memory suitable for holding an object of type ``T`` using a copy of ``alloc`` and constructs an object in that memory via the placement *new-expression* ``::new (pv) T(forward<Args>(args)...)``.
+		
+		*Returns:* An instance of ``unique_ptr<T, allocator_delete<T, A>>`` with ownership of the allocated object and the deleter holding the allocator used for allocation, where ``A`` has type ``allocator_traits<Alloc>::rebind_alloc<T>``.
+		
+		*Postcondition:* ``get() != nullptr``.
+		
+		*Throws:* Any exception thrown from ``Alloc::allocate`` or the constructor of ``T``.
+		
+		*Remarks:* This function shall not participate in overload resolution unless ``T`` is not an array.
+		
+	.. class:: std-section
+	
+	``template<class T, class Alloc, class... Args> unique_ptr<T,`` *see below* ``> allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args);``
+	
+		*Requires:* The expression ``::new (pv) T(forward<Args>(args)...)``, where ``pv`` has type ``void*`` and points to storage suitable for holding an object of type ``T``, shall be well formed. ``Alloc`` shall satisfy the requirements of ``Allocator`` (17.5.3.5). ``Alloc`` shall be capable of allocating memory suitable for holding an object of type ``T``.
+	
+		*Effects:* Allocates memory suitable for holding an object of type ``T`` using ``alloc.get()`` and constructs an object in that memory via the placement *new-expression* ``::new (pv) T(forward<Args>(args)...)``.
+		
+		*Returns:* An instance of ``unique_ptr<T, allocator_delete<T, Alloc&>>`` with ownership of the allocated object and the deleter initialized with ``ref(alloc)``.
+		
+		*Postcondition:* ``get() != nullptr``.
+		
+		*Throws:* Any exception thrown from ``Alloc::allocate`` or the constructor of ``T``.
+		
+		*Remarks:* This function shall not participate in overload resolution unless ``T`` is not an array.
+			
+	.. class:: std-section
+	
+	| ``template<class T, class Alloc, class... Args>`` *unspecified* ``allocate_unique(Alloc&& alloc, Args&&... args) = delete;``
+	| ``template<class T, class Alloc, class... Args>`` *unspecified* ``allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args) = delete;``
+
+		*Remarks:* These functions shall not participate in overload resolution unless ``T`` is an array.
+			
 References
 ===============================================================================
 
-TBA
+.. [N4618] `Working Draft, Standard for Programming Language C++ <http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/n4618.pdf>`_

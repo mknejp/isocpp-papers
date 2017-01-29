@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils 0.13.1: http://docutils.sourceforge.net/" />
-<title>allocate_unique and related utilities</title>
+<title>allocate_unique and allocator_delete</title>
 <meta name="date" content="2017-01-29" />
 <meta name="author" content="Miro Knejp (miro.knejp&#64;gmail.com)" />
 <style type="text/css">
@@ -399,10 +399,20 @@ ul.auto-toc {
 .ss { color: #a31515 } /* Literal.String.Symbol */
 
 </style>
+<style type="text/css">
+
+/* code-formatted insertions to the standard */
+pre.insert { background: lightgreen }
+
+.std-section { font-weight: bold }
+
+.std-note { font-style: italic }
+
+</style>
 </head>
 <body>
-<div class="document" id="allocate-unique-and-related-utilities">
-<h1 class="title">allocate_unique and related utilities</h1>
+<div class="document" id="allocate-unique-and-allocator-delete">
+<h1 class="title"><tt class="docutils literal">allocate_unique</tt> and <tt class="docutils literal">allocator_delete</tt></h1>
 <table class="docinfo" frame="void" rules="none">
 <col class="docinfo-name" />
 <col class="docinfo-content" />
@@ -420,44 +430,44 @@ ul.auto-toc {
 </tbody>
 </table>
 <div class="section" id="abstract">
-<h1><a class="toc-backref" href="#id1">Abstract</a></h1>
+<h1><a class="toc-backref" href="#id2">Abstract</a></h1>
 <p>This paper proposes the addition of the function <tt class="docutils literal">allocate_unique()</tt> to complement the functionality of <tt class="docutils literal">allocate_shared()</tt> for <tt class="docutils literal">unique_ptr</tt>, as well as the addition of the utility <tt class="docutils literal">allocator_delete</tt> to hide frequently needed boilerplate when implementing allocator-aware data structures.</p>
 <div class="contents topic" id="contents">
 <p class="topic-title first">Contents</p>
 <ul class="simple">
-<li><a class="reference internal" href="#abstract" id="id1">Abstract</a></li>
-<li><a class="reference internal" href="#motivation" id="id2">Motivation</a></li>
-<li><a class="reference internal" href="#proposal" id="id3">Proposal</a><ul>
-<li><a class="reference internal" href="#synopsis" id="id4">Synopsis</a></li>
-<li><a class="reference internal" href="#allocator-delete" id="id5">allocator_delete</a></li>
-<li><a class="reference internal" href="#allocate-unique" id="id6">allocate_unique</a></li>
+<li><a class="reference internal" href="#abstract" id="id2">Abstract</a></li>
+<li><a class="reference internal" href="#motivation" id="id3">Motivation</a></li>
+<li><a class="reference internal" href="#proposal" id="id4">Proposal</a><ul>
+<li><a class="reference internal" href="#overview" id="id5">Overview</a></li>
+<li><a class="reference internal" href="#allocator-delete" id="id6">allocator_delete</a></li>
+<li><a class="reference internal" href="#allocate-unique" id="id7">allocate_unique</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#applications-outside-of-allocate-unique" id="id7">Applications Outside of allocate_unique</a><ul>
-<li><a class="reference internal" href="#node-based-containers" id="id8">Node-Based Containers</a></li>
-<li><a class="reference internal" href="#type-erasure" id="id9">Type Erasure</a></li>
+<li><a class="reference internal" href="#applications-outside-of-allocate-unique" id="id8">Applications Outside of allocate_unique</a><ul>
+<li><a class="reference internal" href="#node-based-containers" id="id9">Node-Based Containers</a></li>
+<li><a class="reference internal" href="#type-erasure" id="id10">Type Erasure</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#open-issues" id="id10">Open Issues</a><ul>
-<li><a class="reference internal" href="#allocate-unique-t" id="id11">allocate_unique&lt;T[]&gt;</a></li>
+<li><a class="reference internal" href="#open-issues" id="id11">Open Issues</a><ul>
+<li><a class="reference internal" href="#allocate-unique-t" id="id12">allocate_unique&lt;T[]&gt;</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#summary" id="id12">Summary</a></li>
-<li><a class="reference internal" href="#technical-specification" id="id13">Technical Specification</a></li>
-<li><a class="reference internal" href="#references" id="id14">References</a></li>
+<li><a class="reference internal" href="#summary" id="id13">Summary</a></li>
+<li><a class="reference internal" href="#proposed-wording" id="id14">Proposed Wording</a></li>
+<li><a class="reference internal" href="#references" id="id15">References</a></li>
 </ul>
 </div>
 </div>
 <div class="section" id="motivation">
-<h1><a class="toc-backref" href="#id2">Motivation</a></h1>
+<h1><a class="toc-backref" href="#id3">Motivation</a></h1>
 <p>There is currently an asymmetry in functionality regarding the creation of <tt class="docutils literal">shared_ptr</tt> and <tt class="docutils literal">unique_ptr</tt>. Both of them can be conviently created with <tt class="docutils literal">make_shared()</tt> and <tt class="docutils literal">make_unique()</tt>, respectively, using the default allocator. However if one wishes to use a custom allocator only the former provides a convenient factory in the form of <tt class="docutils literal">allocate_shared()</tt> whereas there is no such facility for <tt class="docutils literal">unique_ptr</tt> and one has to write quite an amount of non-trivial code to create one's own.</p>
 <p>The additions proposed in this paper can be found re-intenved in virtually every library that offers custom allocator support and are already present in standard library implementations for internal use making it obvious this is a frequently sought after functionality that should be readily available in the standard (and <em>de-facto</em> already is, albeit not under a well-known name).</p>
 <p>The inclusion of <tt class="docutils literal">allocator_delete</tt> removes an additional burden for implementing allocator-aware data structures outside the scope of <tt class="docutils literal">unique_ptr</tt>. Together with <tt class="docutils literal">allocate_unique</tt> it provides the means to conveniently create and destroy objects with custom allocators which are not directly tied to <tt class="docutils literal">unique_ptr</tt> lifetimes (such as node-based or type-erasing containers, to name a few).</p>
 </div>
 <div class="section" id="proposal">
-<h1><a class="toc-backref" href="#id3">Proposal</a></h1>
-<div class="section" id="synopsis">
-<h2><a class="toc-backref" href="#id4">Synopsis</a></h2>
+<h1><a class="toc-backref" href="#id4">Proposal</a></h1>
+<div class="section" id="overview">
+<h2><a class="toc-backref" href="#id5">Overview</a></h2>
 <pre class="code c++ literal-block">
 <span class="ln"> 1 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="o">&gt;</span>
 <span class="ln"> 2 </span><span class="k">class</span> <span class="nc">allocator_delete</span> <span class="p">{</span>
@@ -477,32 +487,32 @@ ul.auto-toc {
 <span class="ln">16 </span>  <span class="n">allocator_type</span> <span class="n">alloc</span><span class="p">;</span> <span class="c1">// for exposition only
 </span><span class="ln">17 </span><span class="c1"></span><span class="p">};</span>
 <span class="ln">18 </span>
-<span class="ln">19 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">OtherAlloc</span><span class="o">&gt;</span>
-<span class="ln">20 </span><span class="n">allocator_delete</span><span class="p">(</span><span class="n">OtherAlloc</span><span class="o">&amp;&amp;</span> <span class="n">alloc</span><span class="p">)</span>
-<span class="ln">21 </span>  <span class="o">-&gt;</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">decay_t</span><span class="o">&lt;</span><span class="n">OtherAlloc</span><span class="o">&gt;&gt;::</span><span class="k">template</span> <span class="n">rebind_alloc</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&gt;</span>
-<span class="ln">22 </span>
-<span class="ln">23 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="o">&gt;</span>
-<span class="ln">24 </span><span class="k">class</span> <span class="nc">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Alloc</span><span class="o">&amp;&gt;</span> <span class="p">{</span>
-<span class="ln">25 </span><span class="k">public</span><span class="o">:</span>
-<span class="ln">26 </span>  <span class="k">using</span> <span class="n">allocator_type</span> <span class="o">=</span> <span class="n">remove_cv_t</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span><span class="p">;</span>
-<span class="ln">27 </span>  <span class="k">using</span> <span class="n">pointer</span> <span class="o">=</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">allocator_type</span><span class="o">&gt;::</span><span class="n">pointer</span><span class="p">;</span>
+<span class="ln">19 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="o">&gt;</span>
+<span class="ln">20 </span><span class="k">class</span> <span class="nc">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Alloc</span><span class="o">&amp;&gt;</span> <span class="p">{</span>
+<span class="ln">21 </span><span class="k">public</span><span class="o">:</span>
+<span class="ln">22 </span>  <span class="k">using</span> <span class="n">allocator_type</span> <span class="o">=</span> <span class="n">remove_cv_t</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="ln">23 </span>  <span class="k">using</span> <span class="n">pointer</span> <span class="o">=</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">allocator_type</span><span class="o">&gt;::</span><span class="n">pointer</span><span class="p">;</span>
+<span class="ln">24 </span>
+<span class="ln">25 </span>  <span class="n">allocator_delete</span><span class="p">(</span><span class="n">reference_wrapper</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">alloc</span><span class="p">);</span>
+<span class="ln">26 </span>
+<span class="ln">27 </span>  <span class="kt">void</span> <span class="nf">operator</span><span class="p">()(</span><span class="n">pointer</span> <span class="n">p</span><span class="p">);</span>
 <span class="ln">28 </span>
-<span class="ln">29 </span>  <span class="n">allocator_delete</span><span class="p">(</span><span class="n">reference_wrapper</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">alloc</span><span class="p">);</span>
+<span class="ln">29 </span>  <span class="n">Alloc</span><span class="o">&amp;</span> <span class="n">get_allocator</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
 <span class="ln">30 </span>
-<span class="ln">31 </span>  <span class="kt">void</span> <span class="nf">operator</span><span class="p">()(</span><span class="n">pointer</span> <span class="n">p</span><span class="p">);</span>
-<span class="ln">32 </span>
-<span class="ln">33 </span>  <span class="n">Alloc</span><span class="o">&amp;</span> <span class="n">get_allocator</span><span class="p">()</span> <span class="k">const</span><span class="p">;</span>
+<span class="ln">31 </span><span class="k">private</span><span class="o">:</span>
+<span class="ln">32 </span>  <span class="n">reference_wrapper</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">alloc</span><span class="p">;</span> <span class="c1">// for exposition only
+</span><span class="ln">33 </span><span class="c1"></span><span class="p">};</span>
 <span class="ln">34 </span>
-<span class="ln">35 </span><span class="k">private</span><span class="o">:</span>
-<span class="ln">36 </span>  <span class="n">reference_wrapper</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">alloc</span><span class="p">;</span> <span class="c1">// for exposition only
-</span><span class="ln">37 </span><span class="c1"></span><span class="p">};</span>
+<span class="ln">35 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">OtherAlloc</span><span class="o">&gt;</span>
+<span class="ln">36 </span><span class="n">allocator_delete</span><span class="p">(</span><span class="n">OtherAlloc</span><span class="o">&amp;&amp;</span> <span class="n">alloc</span><span class="p">)</span>
+<span class="ln">37 </span>  <span class="o">-&gt;</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">OtherAlloc</span><span class="o">&gt;::</span><span class="k">template</span> <span class="n">rebind_alloc</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&gt;</span><span class="p">;</span>
 <span class="ln">38 </span>
 <span class="ln">39 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="o">&gt;</span>
 <span class="ln">40 </span><span class="n">allocator_delete</span><span class="p">(</span><span class="n">reference_wrapper</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;</span> <span class="n">alloc</span><span class="p">)</span>
-<span class="ln">41 </span>  <span class="o">-&gt;</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Alloc</span><span class="o">&amp;&gt;</span>
+<span class="ln">41 </span>  <span class="o">-&gt;</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">Alloc</span><span class="o">&amp;&gt;</span><span class="p">;</span>
 <span class="ln">42 </span>
 <span class="ln">43 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
-<span class="ln">44 </span>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">remove_cv_t</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;&gt;::</span><span class="k">template</span> <span class="n">rebind_alloc</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&gt;&gt;</span>
+<span class="ln">44 </span>  <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span> <span class="k">typename</span> <span class="n">allocator_traits</span><span class="o">&lt;</span><span class="n">Alloc</span><span class="o">&gt;::</span><span class="k">template</span> <span class="n">rebind_alloc</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;&gt;&gt;</span>
 <span class="ln">45 </span>    <span class="n">allocate_unique</span><span class="p">(</span><span class="n">Alloc</span><span class="o">&amp;&amp;</span> <span class="n">alloc</span><span class="p">,</span> <span class="n">Args</span><span class="o">&amp;&amp;</span><span class="p">...</span> <span class="n">args</span><span class="p">);</span>
 <span class="ln">46 </span>
 <span class="ln">47 </span><span class="k">template</span><span class="o">&lt;</span><span class="k">class</span> <span class="nc">T</span><span class="p">,</span> <span class="k">class</span> <span class="nc">Alloc</span><span class="p">,</span> <span class="n">class</span><span class="p">...</span> <span class="n">Args</span><span class="o">&gt;</span>
@@ -511,14 +521,14 @@ ul.auto-toc {
 </pre>
 </div>
 <div class="section" id="allocator-delete">
-<h2><a class="toc-backref" href="#id5">allocator_delete</a></h2>
+<h2><a class="toc-backref" href="#id6">allocator_delete</a></h2>
 <p>The standard library already provides one type intended to be used as the <tt class="docutils literal">Deleter</tt> for <tt class="docutils literal">unique_ptr</tt>, namely <tt class="docutils literal">default_delete</tt>. The proposed <tt class="docutils literal">allocator_delete</tt> is a second standard-provided deleter which does not use the <tt class="docutils literal">delete</tt> operator but instead delegates destruction and deletion to a user-provided allocator. By default it stores a copy of the allocator and delegates the necessary operations to the stored copy. A partial specialization for allocator references is provided which only stores a reference to the actual allocator instead of a copy for cases where allocators are stateful and either too big to be carried around in every <tt class="docutils literal">unique_ptr</tt> instance or expensive to copy.</p>
 <p><tt class="docutils literal">allocator_delete</tt> does not perform rebinding in its call operator. It is an error to instantiate <tt class="docutils literal">allocator_delete</tt> with a type <tt class="docutils literal">Alloc</tt> not capable of deallocating objects of type <tt class="docutils literal">T</tt>. This decision was deliberately made to avoid unnecessary rebinding and copy-constructing of potentially stateful allocators for every single deletion in the call operator.</p>
 <p>Because <tt class="docutils literal">allocator_delete</tt> must be instantiated only with an allocator type capable of deallocating the intended target type it cannot be naively created from an existing allocator without doing additional work. Class template deduction guides help picking the correct template argument for <tt class="docutils literal">Alloc</tt> and hide the required allocator rebinding.</p>
 <p>Constructing it with a <tt class="docutils literal">reference_wrapper&lt;Alloc&gt;</tt> argument deduces the second template argument to a reference type resulting in <tt class="docutils literal">allocator_delete</tt> storing only a reference to an allocator instead of a copy. In this case no rebinding takes place as that would necessitate copying and the user <em>deliberately</em> requested reference semantics.</p>
 </div>
 <div class="section" id="allocate-unique">
-<h2><a class="toc-backref" href="#id6">allocate_unique</a></h2>
+<h2><a class="toc-backref" href="#id7">allocate_unique</a></h2>
 <p>This is the main motivation of this proposal. The above is required to implement <tt class="docutils literal">allocate_unique()</tt> but is useful enough on its own outside the scope of <tt class="docutils literal">allocate_unique()</tt> and is therefore proposed as well.</p>
 <p>The <tt class="docutils literal">allocate_unique()</tt> function is not overly big but tricky enough to implement that a naive approach might be incorrect. Below is an implementation that, to the author's knowledge, is correct and exception safe. Achieving exception safety with the two-phase creation required with the allocator interface is a common oversight.</p>
 <pre class="code c++ literal-block">
@@ -540,10 +550,10 @@ ul.auto-toc {
 </div>
 </div>
 <div class="section" id="applications-outside-of-allocate-unique">
-<h1><a class="toc-backref" href="#id7">Applications Outside of allocate_unique</a></h1>
+<h1><a class="toc-backref" href="#id8">Applications Outside of allocate_unique</a></h1>
 <p><tt class="docutils literal">allocator_delete</tt> is technically not required to be made available in the standard library's public interface as it can be easily marked as <em>implementation-defined</em> in the return type of <tt class="docutils literal">allocate_unique()</tt> as is currently done for the return type of <tt class="docutils literal">bind()</tt>. However its utility shows itself even in other applications for which some examples are given here to convince the reader of their usefulness.</p>
 <div class="section" id="node-based-containers">
-<h2><a class="toc-backref" href="#id8">Node-Based Containers</a></h2>
+<h2><a class="toc-backref" href="#id9">Node-Based Containers</a></h2>
 <p>Node-based containers like <tt class="docutils literal">map</tt> or <tt class="docutils literal">list</tt> do typically not store a <tt class="docutils literal">unique_ptr</tt> referencing each and every node. That would store <tt class="docutils literal">n</tt> copies of the deleter which would each have to either copy the allocator for every node or store a reference to the allocator to utilize automatic cleanup. Both are unnecessarily wasteful. The latter establishes a <em>back reference</em> from the node to the container, meaning the container becomes expensive to move as all the back references have to be updated. Instead these containers typically manually allocate/deallocate each node, store them as raw pointers, and because the type of a node is virtually never the same type as the payload, rebinding the allocator for the node type is necessary as well. Then for actually allocating each node a procedure similar to the above is performed, followed later by the manual deletion.</p>
 <p>This means in practice something like this:</p>
 <pre class="code c++ literal-block">
@@ -610,7 +620,7 @@ ul.auto-toc {
 <p>It may not seem like much but the parts that were replaced in the second snippet were the most error-prone. It has much less fiddling around with <tt class="docutils literal">allocator_traits</tt> and one did not have to bother themselves with the nature of two-phase initialization and teardown of objects imposed by the allocator interface.</p>
 </div>
 <div class="section" id="type-erasure">
-<h2><a class="toc-backref" href="#id9">Type Erasure</a></h2>
+<h2><a class="toc-backref" href="#id10">Type Erasure</a></h2>
 <p>Containers like <tt class="docutils literal">function</tt> or <tt class="docutils literal">shared_ptr</tt> employ a technique called <em>type erasure</em> where the exact type of the stored object is not visible in the container's type signature. Implementations often rely on using an internal abstract base class from which concrete class templates are derived. If the container has support for user-provided allocators then the allocator has to be stored somewhere as well. But because the type of the allocator is not part of the container's type signature it, too, must be erased. This means both the payload <em>and</em> the actual allocator are part of the internal object, often simply combined into a <tt class="docutils literal">tuple&lt;Alloc, T&gt;</tt>.</p>
 <p>Below is an excerpt showing how such type erasure is frequently implemented:</p>
 <pre class="code c++ literal-block">
@@ -711,25 +721,290 @@ ul.auto-toc {
 </div>
 </div>
 <div class="section" id="open-issues">
-<h1><a class="toc-backref" href="#id10">Open Issues</a></h1>
+<h1><a class="toc-backref" href="#id11">Open Issues</a></h1>
 <div class="section" id="allocate-unique-t">
-<h2><a class="toc-backref" href="#id11">allocate_unique&lt;T[]&gt;</a></h2>
+<h2><a class="toc-backref" href="#id12">allocate_unique&lt;T[]&gt;</a></h2>
 <p>The current design of <tt class="docutils literal">unique_ptr</tt> and the associated deleter means we cannot make <tt class="docutils literal">allocator_delete</tt> compatible with the array-based <tt class="docutils literal"><span class="pre">unique_ptr&lt;T[]&gt;</span></tt> specialization because there is no way to tell the deleter how many objects to delete. <tt class="docutils literal">default_delete</tt> circumvents this problem because the <tt class="docutils literal">delete[]</tt> operator knows how many elements were allocated with <tt class="docutils literal">new T[]</tt> and it combines both destruction and deallocation in one operation. In contrast the allocator interface imposes a two-phase cleanup process. Making <tt class="docutils literal">allocator_delete</tt> universally compatible with array-based <tt class="docutils literal"><span class="pre">unique_ptr&lt;T[]&gt;</span></tt> requires either the addition of a second overload to the deleter's call operator with the signature <tt class="docutils literal">void(pointer p, size_t n)</tt> which <tt class="docutils literal"><span class="pre">unique_ptr&lt;T[]&gt;</span></tt> would prefer if present, or make it store the number of allocated elements in advance.</p>
-<p>Therefore <tt class="docutils literal">allocate_unique()</tt> with its first template parameter being of the form <tt class="docutils literal">T[]</tt> is currently marked as ill-formed until this issue finds a resolution.</p>
+<p>Therefore <tt class="docutils literal">allocate_unique()</tt> with its first template parameter being of the form <tt class="docutils literal">T[]</tt> is currently considered ill-formed until this issue finds a resolution.</p>
 </div>
 </div>
 <div class="section" id="summary">
-<h1><a class="toc-backref" href="#id12">Summary</a></h1>
+<h1><a class="toc-backref" href="#id13">Summary</a></h1>
 <p>Experience shows that the mechanism abstracted behind <tt class="docutils literal">allocate_unique()</tt> is widely re-invented in many projects. Standard library implementations already have it for internal use but people still have to implement their own. As shown in this proposal doing so correctly is tricky and requires more knowledge about the interface of allocators than is usually necessary to actually do the required job. As such the barrier of entry to providing allocator support in a library is often very high as doing it properly involves careful studying of the allocator interface which many consider to be expert-level territory and prefer not to touch with a ten foot pole.</p>
 <p>The provided examples show how making internal utilities used to implement <tt class="docutils literal">allocate_unique()</tt> available as part of the public interface can greatly help in adding allocator support to other data structures by significantly cutting down on the required boilerplate.</p>
 </div>
-<div class="section" id="technical-specification">
-<h1><a class="toc-backref" href="#id13">Technical Specification</a></h1>
-<p>TBA</p>
+<div class="section" id="proposed-wording">
+<h1><a class="toc-backref" href="#id14">Proposed Wording</a></h1>
+<p>These changes are based on <a class="citation-reference" href="#n4618" id="id1">[N4618]</a>.</p>
+<ol class="arabic">
+<li><p class="first">Change 20.11.1 [unique.ptr] paragraph 6 as follows:</p>
+<blockquote>
+<pre class="literal-block">
+template&lt;class T&gt; struct default_delete;
+template&lt;class T&gt; struct default_delete&lt;T[]&gt;;
+</pre>
+<pre class="insert literal-block">
+template&lt;class T, class Alloc&gt; class allocator_delete;
+template&lt;class T, class Alloc&gt; class allocator_delete&lt;T, Alloc&amp;&gt;;
+
+template&lt;class T, class Alloc&gt;
+allocator_delete(Alloc&amp;&amp; alloc)
+  -&gt; allocator_delete&lt;T, typename allocator_traits&lt;Alloc&gt;::template rebind_alloc&lt;T&gt;&gt;;
+
+template&lt;class T, class Alloc&gt;
+allocator_delete(reference_wrapper&lt;Alloc&gt; alloc)
+  -&gt; allocator_delete&lt;T, Alloc&amp;&gt;;
+</pre>
+<pre class="literal-block">
+template&lt;class T, class D = default_delete&lt;T&gt;&gt; class unique_ptr;
+template&lt;class T, class D&gt; class unique_ptr&lt;T[], D&gt;;
+
+template&lt;class T, class... Args&gt; unique_ptr&lt;T&gt; make_unique(Args&amp;&amp;... args);
+template&lt;class T&gt; unique_ptr&lt;T&gt; make_unique(size_t n);
+template&lt;class T, class... Args&gt; unspecified make_unique(Args&amp;&amp;...) = delete;
+</pre>
+<pre class="insert literal-block">
+template&lt;class T, class Alloc, class... Args&gt;
+  unique_ptr&lt;T, see below&gt; allocate_unique(Alloc&amp;&amp; alloc, Args&amp;&amp;... args);
+template&lt;class T, class Alloc, class... Args&gt;
+  unique_ptr&lt;T, see below&gt; allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, Args&amp;&amp;... args);
+template&lt;class T, class Alloc, class... Args&gt;
+  unspecified allocate_unique(Alloc&amp;&amp; alloc, Args&amp;&amp;... args) = delete;
+template&lt;class T, class Alloc, class... Args&gt;
+  unspecified allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, Args&amp;&amp;... args) = delete;
+</pre>
+<pre class="literal-block">
+template&lt;class T, class D&gt; void swap(unique_ptr&lt;T, D&gt;&amp; x, unique_ptr&lt;T, D&gt;&amp; y) noexcept;
+</pre>
+</blockquote>
+</li>
+<li><p class="first">Add a new section to 20.11.1 [unique.ptr] as follows:</p>
+<blockquote>
+<p class="std-section">20.11.1.x Allocator deleter [unique.ptr.allocdltr]</p>
+<p class="std-section">20.11.1.x.1 In general [unique.ptr.allocdltr.general]</p>
+<p>The class template <tt class="docutils literal">allocator_delete</tt> delegates deletion to client-supplied allocators when used as deleter (destruction policy) for the class template <tt class="docutils literal">unique_ptr</tt>.</p>
+<p>The template parameter <tt class="docutils literal">Alloc</tt> of <tt class="docutils literal">allocator_delete</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (Table 31) unless it is a reference type in which case the requirement applies to the referred-to type.</p>
+<p>The template parameter <tt class="docutils literal">Alloc</tt> of <tt class="docutils literal">allocator_delete</tt> shall not be a rvalue reference type.</p>
+<p>The template parameter <tt class="docutils literal">T</tt> of <tt class="docutils literal">allocator_delete</tt> may be an incomplete type if the used allocator satisfies the allocator completeness requirements 17.5.3.5.1.</p>
+<p class="std-note">[Note: The intended way of creating <tt class="docutils literal">allocator_delete</tt> objects is utilizing the class template deduction guides via <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(alloc)</span></tt> and <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(ref(alloc))</span></tt> which take care of allocator rebinding. -end note]</p>
+<p class="std-section">20.11.1.x.2 <tt class="docutils literal">allocator_delete</tt> [unique.ptr.allocdltr.copy]</p>
+<pre class="literal-block">
+namespace std {
+  template&lt;class T, class Alloc&gt;
+  class allocator_delete {
+  public:
+    using allocator_type = remove_cv_t&lt;Alloc&gt;;
+    using pointer = typename allocator_traits&lt;allocator_type&gt;::pointer;
+
+    template&lt;class OtherAlloc&gt;
+      allocator_delete(OtherAlloc&amp;&amp; other) noexcept;
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete(const allocator_delete&lt;U, OtherAlloc&gt;&amp; other) noexcept;
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete(allocator_delete&lt;U, OtherAlloc&gt;&amp;&amp; other) noexcept;
+
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete&amp; operator=(const allocator_delete&lt;U, OtherAlloc&gt;&amp; other) noexcept;
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete&amp; operator=(allocator_delete&lt;U, OtherAlloc&gt;&amp;&amp; other) noexcept;
+
+    void operator()(pointer p);
+
+    Alloc&amp; get_allocator() noexcept;
+    const Alloc&amp; get_allocator() const noexcept;
+
+    void swap(allocator_delete&amp; other) noexcept;
+
+  private:
+    Alloc alloc; // for exposition only
+  };
+}
+</pre>
+<p>The primary class template <tt class="docutils literal">allocator_delete</tt> delegates the deletion operation to an instance of <tt class="docutils literal">Alloc</tt> stored as part of the deleter.</p>
+<p class="std-section"><tt class="docutils literal">template&lt;class OtherAlloc&gt; allocator_delete(OtherAlloc&amp;&amp; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Requires:</em> <tt class="docutils literal">OtherAlloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (Table 31).</p>
+<p><em>Effects:</em> Constructs an <tt class="docutils literal">allocator_delete</tt> object initializing the stored allocator with <tt class="docutils literal"><span class="pre">forward&lt;OtherAlloc&gt;(other)</span></tt>.</p>
+<p><em>Remarks:</em> This constructor shall not participate in overload resolution unless <tt class="docutils literal">is_constructible_v&lt;Alloc, <span class="pre">OtherAlloc&amp;&amp;&gt;</span></tt> is <tt class="docutils literal">true</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete(const allocator_delete&lt;U, OtherAlloc&gt;&amp; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> Constructs an <tt class="docutils literal">allocator_delete</tt> object initializing the stored allocator with <tt class="docutils literal">other.get_allocator()</tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This constructor shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">is_constructible_v&lt;Alloc, const <span class="pre">remove_reference_t&lt;OtherAlloc&gt;&amp;&gt;</span></tt> is <tt class="docutils literal">true</tt>.</li>
+</ul>
+</dd>
+</dl>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete(allocator_delete&lt;U, <span class="pre">OtherAlloc&gt;&amp;&amp;</span> other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> Constructs an <tt class="docutils literal">allocator_delete</tt> object initializing the stored allocator with <tt class="docutils literal"><span class="pre">move(other.get_allocator())</span></tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This constructor shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">is_constructible_v&lt;Alloc, <span class="pre">remove_reference_t&lt;OtherAlloc&gt;&amp;&amp;)</span></tt> is <tt class="docutils literal">true</tt>.</li>
+</ul>
+</dd>
+</dl>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete&amp; <span class="pre">operator=(const</span> allocator_delete&lt;U, OtherAlloc&gt;&amp; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> <tt class="docutils literal">get_allocator() = other.get_allocator()</tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This operator shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">is_assignable_v&lt;Alloc, const <span class="pre">remove_reference_t&lt;OtherAlloc&gt;&amp;&gt;</span></tt> is <tt class="docutils literal">true</tt>.</li>
+</ul>
+</dd>
+</dl>
+<p><em>Returns:</em> <tt class="docutils literal">*this</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete&amp; <span class="pre">operator=(allocator_delete&lt;U,</span> <span class="pre">OtherAlloc&gt;&amp;&amp;</span> other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> <tt class="docutils literal">get_allocator() = <span class="pre">move(other.get_allocator())</span></tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This constructor shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">is_assignable_v&lt;Alloc, <span class="pre">remove_reference_t&lt;OtherAlloc&gt;&amp;&amp;)</span></tt> is <tt class="docutils literal">true</tt>.</li>
+</ul>
+</dd>
+</dl>
+<p><em>Returns:</em> <tt class="docutils literal">*this</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">void <span class="pre">operator()(pointer</span> p);</tt></p>
+<blockquote>
+<p><em>Effects:</em> Calls <tt class="docutils literal"><span class="pre">p-&gt;~T()</span></tt> followed by <tt class="docutils literal"><span class="pre">allocator_traits&lt;Alloc&gt;::deallocate(get_allocator(),</span> p, 1)</tt>.</p>
+</blockquote>
+<div class="std-section line-block">
+<div class="line"><tt class="docutils literal">Alloc&amp; get_allocator() noexcept;</tt></div>
+<div class="line"><tt class="docutils literal">const Alloc&amp; get_allocator() const noexcept;</tt></div>
+</div>
+<blockquote>
+<p><em>Returns:</em> A reference to the stored allocator.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">void swap(allocator_delete&amp; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Requires:</em> <tt class="docutils literal">get_allocator()</tt> shall be swappable (17.5.3.2) and shall not throw an exception under <tt class="docutils literal">swap</tt>.</p>
+<p><em>Effects:</em> Invokes <tt class="docutils literal">swap</tt> on the stored allocators of <tt class="docutils literal">*this</tt> and <tt class="docutils literal">other</tt>.</p>
+</blockquote>
+<p class="std-section">20.11.1.x.3 <tt class="docutils literal">allocator_delete&lt;T, Alloc&amp;&gt;</tt> [unique.ptr.allocdltr.ref]</p>
+<pre class="literal-block">
+namespace std {
+  template&lt;class T, class Alloc&gt;
+  class allocator_delete&lt;T, Alloc&amp;&gt; {
+  public:
+    using allocator_type = remove_cv_t&lt;Alloc&gt;;
+    using pointer = typename allocator_traits&lt;allocator_type&gt;::pointer;
+
+    template&lt;class OtherAlloc&gt;
+      allocator_delete(reference_wrapper&lt;OtherAlloc&gt; other) noexcept;
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete(allocator_delete&lt;U, OtherAlloc&amp;&gt; other) noexcept;
+    template&lt;class U, class OtherAlloc&gt;
+      allocator_delete&amp; operator=(allocator_delete&lt;U, OtherAlloc&amp;&gt; other) noexcept;
+
+    void operator()(pointer p);
+
+    Alloc&amp; get_allocator() const noexcept;
+
+    void swap(allocator_delete&amp; other) noexcept;
+
+  private:
+    reference_wrapper&lt;Alloc&gt; alloc; // for exposition only
+  };
+}
+</pre>
+<p>A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored instance.</p>
+<p class="std-section"><tt class="docutils literal">template&lt;class OtherAlloc&gt; allocator_delete(reference_wrapper&lt;OtherAlloc&gt; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Requires:</em> <tt class="docutils literal">OtherAlloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (Table 31).</p>
+<p><em>Effects:</em> Constructs an <tt class="docutils literal">allocator_delete</tt> object storing a reference to <tt class="docutils literal">other.get()</tt>.</p>
+<p><em>Remarks:</em> This constructor shall not participate in overload resolution unless <tt class="docutils literal">OtherAlloc&amp;</tt> is implicitly convertible to <tt class="docutils literal">Alloc&amp;</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete(allocator_delete&lt;U, OtherAlloc&amp;&gt; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> Constructs an <tt class="docutils literal">allocator_delete</tt> object storing a reference to <tt class="docutils literal">other.get_allocator()</tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This constructor shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">OtherAlloc&amp;</tt> is implicitly convertible to <tt class="docutils literal">Alloc&amp;</tt>.</li>
+</ul>
+</dd>
+</dl>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class U, class OtherAlloc&gt; allocator_delete&amp; <span class="pre">operator=(allocator_delete&lt;U,</span> OtherAlloc&amp;&gt; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> Rebinds the stored allocator reference to <tt class="docutils literal">other.get_allocator()</tt>.</p>
+<dl class="docutils">
+<dt><em>Remarks:</em> This operator shall not participate in overload resolution unless:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal">U*</tt> is implicitly convertible to <tt class="docutils literal">T*</tt>, and</li>
+<li><tt class="docutils literal">OtherAlloc&amp;</tt> is implicitly convertible to <tt class="docutils literal">Alloc&amp;</tt>.</li>
+</ul>
+</dd>
+</dl>
+<p><em>Returns:</em> <tt class="docutils literal">*this</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">void <span class="pre">operator()(pointer</span> p);</tt></p>
+<blockquote>
+<p><em>Effects:</em> Calls <tt class="docutils literal"><span class="pre">p-&gt;~T()</span></tt> followed by <tt class="docutils literal"><span class="pre">allocator_traits&lt;Alloc&gt;::deallocate(get_allocator(),</span> p, 1)</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">Alloc&amp; get_allocator() const noexcept;</tt></p>
+<blockquote>
+<p><em>Returns:</em> <tt class="docutils literal">alloc.get()</tt>.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">void swap(allocator_delete&amp; other) noexcept;</tt></p>
+<blockquote>
+<p><em>Effects:</em> Swaps the allocator references of <tt class="docutils literal">*this</tt> and <tt class="docutils literal">other</tt>.</p>
+</blockquote>
+</blockquote>
+</li>
+<li><p class="first">Append new paragraphs to section 20.11.1.4 [unique.ptr.create] as follows:</p>
+<blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt; unique_ptr&lt;T,</tt> <em>see below</em> <tt class="docutils literal">&gt; allocate_unique(Alloc&amp;&amp; alloc, <span class="pre">Args&amp;&amp;...</span> args);</tt></p>
+<blockquote>
+<p><em>Requires:</em> The expression <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt> where <tt class="docutils literal">pv</tt> has type <tt class="docutils literal">void*</tt> and points to storage suitable for holding an object of type <tt class="docutils literal">T</tt>, shall be well formed. <tt class="docutils literal">Alloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (17.5.3.5).</p>
+<p><em>Effects:</em> Allocates memory suitable for holding an object of type <tt class="docutils literal">T</tt> using a copy of <tt class="docutils literal">alloc</tt> and constructs an object in that memory via the placement <em>new-expression</em> <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>.</p>
+<p><em>Returns:</em> An instance of <tt class="docutils literal">unique_ptr&lt;T, allocator_delete&lt;T, A&gt;&gt;</tt> with ownership of the allocated object and the deleter holding the allocator used for allocation, where <tt class="docutils literal">A</tt> has type <tt class="docutils literal"><span class="pre">allocator_traits&lt;Alloc&gt;::rebind_alloc&lt;T&gt;</span></tt>.</p>
+<p><em>Postcondition:</em> <tt class="docutils literal">get() != nullptr</tt>.</p>
+<p><em>Throws:</em> Any exception thrown from <tt class="docutils literal"><span class="pre">Alloc::allocate</span></tt> or the constructor of <tt class="docutils literal">T</tt>.</p>
+<p><em>Remarks:</em> This function shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is not an array.</p>
+</blockquote>
+<p class="std-section"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt; unique_ptr&lt;T,</tt> <em>see below</em> <tt class="docutils literal">&gt; allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, <span class="pre">Args&amp;&amp;...</span> args);</tt></p>
+<blockquote>
+<p><em>Requires:</em> The expression <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>, where <tt class="docutils literal">pv</tt> has type <tt class="docutils literal">void*</tt> and points to storage suitable for holding an object of type <tt class="docutils literal">T</tt>, shall be well formed. <tt class="docutils literal">Alloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (17.5.3.5). <tt class="docutils literal">Alloc</tt> shall be capable of allocating memory suitable for holding an object of type <tt class="docutils literal">T</tt>.</p>
+<p><em>Effects:</em> Allocates memory suitable for holding an object of type <tt class="docutils literal">T</tt> using <tt class="docutils literal">alloc.get()</tt> and constructs an object in that memory via the placement <em>new-expression</em> <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>.</p>
+<p><em>Returns:</em> An instance of <tt class="docutils literal">unique_ptr&lt;T, allocator_delete&lt;T, <span class="pre">Alloc&amp;&gt;&gt;</span></tt> with ownership of the allocated object and the deleter initialized with <tt class="docutils literal">ref(alloc)</tt>.</p>
+<p><em>Postcondition:</em> <tt class="docutils literal">get() != nullptr</tt>.</p>
+<p><em>Throws:</em> Any exception thrown from <tt class="docutils literal"><span class="pre">Alloc::allocate</span></tt> or the constructor of <tt class="docutils literal">T</tt>.</p>
+<p><em>Remarks:</em> This function shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is not an array.</p>
+</blockquote>
+<div class="std-section line-block">
+<div class="line"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt;</tt> <em>unspecified</em> <tt class="docutils literal">allocate_unique(Alloc&amp;&amp; alloc, <span class="pre">Args&amp;&amp;...</span> args) = delete;</tt></div>
+<div class="line"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt;</tt> <em>unspecified</em> <tt class="docutils literal">allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, <span class="pre">Args&amp;&amp;...</span> args) = delete;</tt></div>
+</div>
+<blockquote>
+<p><em>Remarks:</em> These functions shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is an array.</p>
+</blockquote>
+</blockquote>
+</li>
+</ol>
 </div>
 <div class="section" id="references">
-<h1><a class="toc-backref" href="#id14">References</a></h1>
-<p>TBA</p>
+<h1><a class="toc-backref" href="#id15">References</a></h1>
+<table class="docutils citation" frame="void" id="n4618" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[N4618]</a></td><td><a class="reference external" href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/n4618.pdf">Working Draft, Standard for Programming Language C++</a></td></tr>
+</tbody>
+</table>
 </div>
 </div>
 </body>
