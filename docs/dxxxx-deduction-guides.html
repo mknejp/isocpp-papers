@@ -4,8 +4,8 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils 0.13.1: http://docutils.sourceforge.net/" />
-<title>Class Template Deduction Guides for &quot;Diamond Operators&quot;</title>
-<meta name="date" content="2017-01-14" />
+<title>Class template deduction guides for &quot;diamond operators&quot;</title>
+<meta name="date" content="2017-01-29" />
 <meta name="author" content="Miro Knejp (miro.knejp&#64;gmail.com)" />
 <style type="text/css">
 
@@ -402,7 +402,7 @@ ul.auto-toc {
 </head>
 <body>
 <div class="document" id="class-template-deduction-guides-for-diamond-operators">
-<h1 class="title">Class Template Deduction Guides for &quot;Diamond Operators&quot;</h1>
+<h1 class="title">Class template deduction guides for &quot;diamond operators&quot;</h1>
 <table class="docinfo" frame="void" rules="none">
 <col class="docinfo-name" />
 <col class="docinfo-content" />
@@ -410,7 +410,7 @@ ul.auto-toc {
 <tr class="document field"><th class="docinfo-name">Document:</th><td class="field-body">Dxxxx</td>
 </tr>
 <tr><th class="docinfo-name">Date:</th>
-<td>2017-01-14</td></tr>
+<td>2017-01-29</td></tr>
 <tr class="project field"><th class="docinfo-name">Project:</th><td class="field-body">Programming Language C++</td>
 </tr>
 <tr class="audience field"><th class="docinfo-name">Audience:</th><td class="field-body">Library Evolution Working Group</td>
@@ -419,12 +419,10 @@ ul.auto-toc {
 <td>Miro Knejp (<a class="reference external" href="mailto:miro.knejp&#64;gmail.com">miro.knejp&#64;gmail.com</a>)</td></tr>
 </tbody>
 </table>
-<style>
-  pre.insert { background: lightgreen }
-</style><!-- .. contents:: -->
 <div class="section" id="abstract">
 <h1>Abstract</h1>
 <p>This paper proposes a simplification of the syntax required to use library function types of the form <tt class="docutils literal"><span class="pre">less&lt;&gt;()</span></tt> (the so called &quot;diamond operators&quot;) to <tt class="docutils literal">less()</tt> by introducing class template deduction guides.</p>
+<!-- .. contents:: -->
 </div>
 <div class="section" id="proposal">
 <h1>Proposal</h1>
@@ -435,8 +433,9 @@ func() -&gt; func&lt;void&gt;;
 </div>
 <div class="section" id="proposed-wording">
 <h1>Proposed Wording</h1>
-<p>This change is based on <a class="reference external" href="http://wg21.link/n4618">N4618</a>.</p>
-<p>Modify paragraph <tt class="docutils literal">20.14 p2 &quot;Header &lt;functional&gt; synopsis&quot;</tt></p>
+<p>These changes are based on <a class="citation-reference" href="#n4618" id="id1">[N4618]</a>.</p>
+<p>Change 20.14 [function.objects] paragraph 2 as follows:</p>
+<blockquote>
 <pre class="literal-block">
 // 20.14.5, arithmetic operations
 template &lt;class T = void&gt; struct plus;
@@ -514,12 +513,16 @@ bit_or()  -&gt; bit_or&lt;void&gt;;
 bit_xor() -&gt; bit_xor&lt;void&gt;;
 bit_not() -&gt; bit_not&lt;void&gt;;
 </pre>
+</blockquote>
 </div>
 <div class="section" id="references">
 <h1>References</h1>
-<ul class="simple">
-<li><a class="reference external" href="http://wg21.link/n4618">N4618</a> Working Draft, Standard for Programming Language C++</li>
-</ul>
+<table class="docutils citation" frame="void" id="n4618" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[N4618]</a></td><td><a class="reference external" href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/n4618.pdf">Working Draft, Standard for Programming Language C++</a></td></tr>
+</tbody>
+</table>
 </div>
 <div class="section" id="acknowledgements">
 <h1>Acknowledgements</h1>
