@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils 0.13.1: http://docutils.sourceforge.net/" />
 <title>allocate_unique and allocator_delete</title>
-<meta name="date" content="2017-01-29" />
+<meta name="date" content="2017-02-01" />
 <meta name="author" content="Miro Knejp (miro.knejp&#64;gmail.com)" />
 <style type="text/css">
 
@@ -420,7 +420,7 @@ pre.insert { background: lightgreen }
 <tr class="document field"><th class="docinfo-name">Document:</th><td class="field-body">D0316R0</td>
 </tr>
 <tr><th class="docinfo-name">Date:</th>
-<td>2017-01-29</td></tr>
+<td>2017-02-01</td></tr>
 <tr class="project field"><th class="docinfo-name">Project:</th><td class="field-body">Programming Language C++</td>
 </tr>
 <tr class="audience field"><th class="docinfo-name">Audience:</th><td class="field-body">Library Evolution Working Group</td>
@@ -575,7 +575,7 @@ pre.insert { background: lightgreen }
 <span class="ln">16 </span>    <span class="k">auto</span> <span class="n">hold_deleter</span> <span class="o">=</span> <span class="p">[</span><span class="o">&amp;</span><span class="n">alloc</span><span class="p">]</span> <span class="p">(</span><span class="k">auto</span> <span class="n">p</span><span class="p">)</span> <span class="p">{</span>
 <span class="ln">17 </span>      <span class="n">traits</span><span class="o">::</span><span class="n">deallocate</span><span class="p">(</span><span class="n">alloc</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
 <span class="ln">18 </span>    <span class="p">};</span>
-<span class="ln">19 </span>        <span class="k">using</span> <span class="n">hold_t</span> <span class="o">=</span> <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">node</span><span class="p">,</span> <span class="k">decltype</span><span class="p">(</span><span class="n">hold_deleter</span><span class="p">)</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="ln">19 </span>    <span class="k">using</span> <span class="n">hold_t</span> <span class="o">=</span> <span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">node</span><span class="p">,</span> <span class="k">decltype</span><span class="p">(</span><span class="n">hold_deleter</span><span class="p">)</span><span class="o">&gt;</span><span class="p">;</span>
 <span class="ln">20 </span>    <span class="k">auto</span> <span class="n">hold</span> <span class="o">=</span> <span class="n">hold_t</span><span class="p">(</span><span class="n">traits</span><span class="o">::</span><span class="n">allocate</span><span class="p">(</span><span class="n">alloc</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">hold_deleter</span><span class="p">);</span>
 <span class="ln">21 </span>    <span class="n">traits</span><span class="o">::</span><span class="n">construct</span><span class="p">(</span><span class="n">alloc</span><span class="p">,</span> <span class="n">hold</span><span class="p">.</span><span class="n">get</span><span class="p">(),</span> <span class="p">...);</span>
 <span class="ln">22 </span>    <span class="n">append_node_to_list</span><span class="p">(</span><span class="n">hold</span><span class="p">.</span><span class="n">release</span><span class="p">());</span> <span class="c1">// noexcept
@@ -610,7 +610,7 @@ pre.insert { background: lightgreen }
 </span><span class="ln">17 </span><span class="c1"></span>  <span class="p">}</span>
 <span class="ln">18 </span>
 <span class="ln">19 </span>  <span class="o">~</span><span class="n">list</span><span class="p">()</span> <span class="p">{</span>
-<span class="ln">20 </span>    <span class="k">auto</span> <span class="n">del</span> <span class="o">=</span> <span class="n">allocator_deleter</span><span class="o">&lt;</span><span class="n">node</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ref</span><span class="p">(</span><span class="n">alloc</span><span class="p">));</span>
+<span class="ln">20 </span>    <span class="k">auto</span> <span class="n">del</span> <span class="o">=</span> <span class="n">allocator_delete</span><span class="o">&lt;</span><span class="n">node</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ref</span><span class="p">(</span><span class="n">alloc</span><span class="p">));</span>
 <span class="ln">21 </span>    <span class="k">for</span><span class="p">(</span><span class="k">auto</span><span class="o">*</span> <span class="nl">node</span> <span class="p">:</span> <span class="n">nodes</span><span class="p">())</span> <span class="p">{</span>
 <span class="ln">22 </span>      <span class="n">del</span><span class="p">(</span><span class="n">node</span><span class="p">);</span>
 <span class="ln">23 </span>    <span class="p">}</span>
@@ -770,8 +770,6 @@ template&lt;class T, class Alloc, class... Args&gt;
   unique_ptr&lt;T, see below&gt; allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, Args&amp;&amp;... args);
 template&lt;class T, class Alloc, class... Args&gt;
   unspecified allocate_unique(Alloc&amp;&amp; alloc, Args&amp;&amp;... args) = delete;
-template&lt;class T, class Alloc, class... Args&gt;
-  unspecified allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, Args&amp;&amp;... args) = delete;
 </pre>
 <pre class="literal-block">
 template&lt;class T, class D&gt; void swap(unique_ptr&lt;T, D&gt;&amp; x, unique_ptr&lt;T, D&gt;&amp; y) noexcept;
@@ -786,7 +784,7 @@ template&lt;class T, class D&gt; void swap(unique_ptr&lt;T, D&gt;&amp; x, unique
 <p>The template parameter <tt class="docutils literal">Alloc</tt> of <tt class="docutils literal">allocator_delete</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (Table 31) unless it is a reference type in which case the requirement applies to the referred-to type.</p>
 <p>The template parameter <tt class="docutils literal">Alloc</tt> of <tt class="docutils literal">allocator_delete</tt> shall not be a rvalue reference type.</p>
 <p>The template parameter <tt class="docutils literal">T</tt> of <tt class="docutils literal">allocator_delete</tt> may be an incomplete type if the used allocator satisfies the allocator completeness requirements 17.5.3.5.1.</p>
-<p class="std-note">[Note: The intended way of creating <tt class="docutils literal">allocator_delete</tt> objects is utilizing the class template deduction guides via <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(alloc)</span></tt> and <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(ref(alloc))</span></tt> which take care of allocator rebinding. -end note]</p>
+<p class="std-note">[Note: The intended way of creating <tt class="docutils literal">allocator_delete</tt> objects is utilizing the class template deduction guides via <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(alloc)</span></tt> and <tt class="docutils literal"><span class="pre">allocator_delete&lt;T&gt;(ref(alloc))</span></tt> (where <tt class="docutils literal">alloc</tt> is an allocator) which take care of allocator rebinding. -end note]</p>
 <p class="std-section">20.11.1.x.2 <tt class="docutils literal">allocator_delete</tt> [unique.ptr.allocdltr.copy]</p>
 <pre class="literal-block">
 namespace std {
@@ -920,7 +918,7 @@ namespace std {
   };
 }
 </pre>
-<p>A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored instance.</p>
+<p>A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored copy.</p>
 <p class="std-section"><tt class="docutils literal">template&lt;class OtherAlloc&gt; allocator_delete(reference_wrapper&lt;OtherAlloc&gt; other) noexcept;</tt></p>
 <blockquote>
 <p><em>Requires:</em> <tt class="docutils literal">OtherAlloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (Table 31).</p>
@@ -980,18 +978,15 @@ namespace std {
 <p class="std-section"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt; unique_ptr&lt;T,</tt> <em>see below</em> <tt class="docutils literal">&gt; allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, <span class="pre">Args&amp;&amp;...</span> args);</tt></p>
 <blockquote>
 <p><em>Requires:</em> The expression <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>, where <tt class="docutils literal">pv</tt> has type <tt class="docutils literal">void*</tt> and points to storage suitable for holding an object of type <tt class="docutils literal">T</tt>, shall be well formed. <tt class="docutils literal">Alloc</tt> shall satisfy the requirements of <tt class="docutils literal">Allocator</tt> (17.5.3.5). <tt class="docutils literal">Alloc</tt> shall be capable of allocating memory suitable for holding an object of type <tt class="docutils literal">T</tt>.</p>
-<p><em>Effects:</em> Allocates memory suitable for holding an object of type <tt class="docutils literal">T</tt> using <tt class="docutils literal">alloc.get()</tt> and constructs an object in that memory via the placement <em>new-expression</em> <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>.</p>
+<p><em>Effects:</em> Allocates memory suitable for holding an object of type <tt class="docutils literal">T</tt> using <tt class="docutils literal">alloc.get()</tt> directly and constructs an object in that memory via the placement <em>new-expression</em> <tt class="docutils literal">::new (pv) <span class="pre">T(forward&lt;Args&gt;(args)...)</span></tt>.</p>
 <p><em>Returns:</em> An instance of <tt class="docutils literal">unique_ptr&lt;T, allocator_delete&lt;T, <span class="pre">Alloc&amp;&gt;&gt;</span></tt> with ownership of the allocated object and the deleter initialized with <tt class="docutils literal">ref(alloc)</tt>.</p>
 <p><em>Postcondition:</em> <tt class="docutils literal">get() != nullptr</tt>.</p>
 <p><em>Throws:</em> Any exception thrown from <tt class="docutils literal"><span class="pre">Alloc::allocate</span></tt> or the constructor of <tt class="docutils literal">T</tt>.</p>
 <p><em>Remarks:</em> This function shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is not an array.</p>
 </blockquote>
-<div class="std-section line-block">
-<div class="line"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt;</tt> <em>unspecified</em> <tt class="docutils literal">allocate_unique(Alloc&amp;&amp; alloc, <span class="pre">Args&amp;&amp;...</span> args) = delete;</tt></div>
-<div class="line"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt;</tt> <em>unspecified</em> <tt class="docutils literal">allocate_unique(reference_wrapper&lt;Alloc&gt; alloc, <span class="pre">Args&amp;&amp;...</span> args) = delete;</tt></div>
-</div>
+<p class="std-section"><tt class="docutils literal">template&lt;class T, class Alloc, <span class="pre">class...</span> Args&gt;</tt> <em>unspecified</em> <tt class="docutils literal">allocate_unique(Alloc&amp;&amp; alloc, <span class="pre">Args&amp;&amp;...</span> args) = delete;</tt></p>
 <blockquote>
-<p><em>Remarks:</em> These functions shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is an array.</p>
+<p><em>Remarks:</em> This function shall not participate in overload resolution unless <tt class="docutils literal">T</tt> is an array.</p>
 </blockquote>
 </blockquote>
 </li>

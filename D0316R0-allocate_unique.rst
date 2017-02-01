@@ -159,7 +159,7 @@ This means in practice something like this:
 	    auto hold_deleter = [&alloc] (auto p) {
 	      traits::deallocate(alloc, p, 1);
 	    };
-		using hold_t = unique_ptr<node, decltype(hold_deleter)>;
+	    using hold_t = unique_ptr<node, decltype(hold_deleter)>;
 	    auto hold = hold_t(traits::allocate(alloc, 1), hold_deleter);
 	    traits::construct(alloc, hold.get(), ...);
 	    append_node_to_list(hold.release()); // noexcept
@@ -197,7 +197,7 @@ Compare this to using the utilities proposed in this paper:
 	  }
 
 	  ~list() {
-	    auto del = allocator_deleter<node>(ref(alloc));
+	    auto del = allocator_delete<node>(ref(alloc));
 	    for(auto* node : nodes()) {
 	      del(node);
 	    }
@@ -377,8 +377,6 @@ These changes are based on [N4618]_.
 		  unique_ptr<T, see below> allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args);
 		template<class T, class Alloc, class... Args>
 		  unspecified allocate_unique(Alloc&& alloc, Args&&... args) = delete;
-		template<class T, class Alloc, class... Args>
-		  unspecified allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args) = delete;
 
 	::
 		
@@ -404,7 +402,7 @@ These changes are based on [N4618]_.
 	
 	.. class:: std-note
 	
-	[Note: The intended way of creating ``allocator_delete`` objects is utilizing the class template deduction guides via ``allocator_delete<T>(alloc)`` and ``allocator_delete<T>(ref(alloc))`` which take care of allocator rebinding. -end note]
+	[Note: The intended way of creating ``allocator_delete`` objects is utilizing the class template deduction guides via ``allocator_delete<T>(alloc)`` and ``allocator_delete<T>(ref(alloc))`` (where ``alloc`` is an allocator) which take care of allocator rebinding. -end note]
 	
 	.. class:: std-section
 		
@@ -551,7 +549,7 @@ These changes are based on [N4618]_.
 		  };
 		}
 		
-	A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored instance.
+	A specialization for allocator lvalue references is provided to delegate deletion to a referred-to allocator instead of to a stored copy.
 	
 	.. class:: std-section
 	
@@ -627,7 +625,7 @@ These changes are based on [N4618]_.
 	
 		*Requires:* The expression ``::new (pv) T(forward<Args>(args)...)``, where ``pv`` has type ``void*`` and points to storage suitable for holding an object of type ``T``, shall be well formed. ``Alloc`` shall satisfy the requirements of ``Allocator`` (17.5.3.5). ``Alloc`` shall be capable of allocating memory suitable for holding an object of type ``T``.
 	
-		*Effects:* Allocates memory suitable for holding an object of type ``T`` using ``alloc.get()`` and constructs an object in that memory via the placement *new-expression* ``::new (pv) T(forward<Args>(args)...)``.
+		*Effects:* Allocates memory suitable for holding an object of type ``T`` using ``alloc.get()`` directly and constructs an object in that memory via the placement *new-expression* ``::new (pv) T(forward<Args>(args)...)``.
 		
 		*Returns:* An instance of ``unique_ptr<T, allocator_delete<T, Alloc&>>`` with ownership of the allocated object and the deleter initialized with ``ref(alloc)``.
 		
@@ -639,10 +637,9 @@ These changes are based on [N4618]_.
 			
 	.. class:: std-section
 	
-	| ``template<class T, class Alloc, class... Args>`` *unspecified* ``allocate_unique(Alloc&& alloc, Args&&... args) = delete;``
-	| ``template<class T, class Alloc, class... Args>`` *unspecified* ``allocate_unique(reference_wrapper<Alloc> alloc, Args&&... args) = delete;``
+	``template<class T, class Alloc, class... Args>`` *unspecified* ``allocate_unique(Alloc&& alloc, Args&&... args) = delete;``
 
-		*Remarks:* These functions shall not participate in overload resolution unless ``T`` is an array.
+		*Remarks:* This function shall not participate in overload resolution unless ``T`` is an array.
 			
 References
 ===============================================================================
