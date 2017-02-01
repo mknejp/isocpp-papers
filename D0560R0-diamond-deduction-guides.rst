@@ -2,7 +2,7 @@
  Class template deduction guides for "diamond operators"
 ===============================================================================
 
-:Document:	Dxxxx
+:Document:	D0560R0
 :Date:		|today|
 :Project:	Programming Language C++
 :Audience:	Library Evolution Working Group
