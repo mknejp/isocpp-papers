@@ -2,7 +2,7 @@
  ``allocate_unique`` and ``allocator_delete``
 ===============================================================================
 
-:Document:	D0316R0
+:Document:	D0316R1
 :Date:		|today|
 :Project:	Programming Language C++
 :Audience:	Library Evolution Working Group
